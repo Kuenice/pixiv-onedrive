@@ -75,6 +75,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DownloadDir "
 
 > Edge 可能会在启动时提示“请停用开发人员模式扩展”。这是未上架商店的扩展的正常提示，选择保留即可。
 
+### 商店版配置
+
+如果通过 **Microsoft Edge 加载项商店**安装，扩展目录是只读的，安装器无法自动写入 `config.js`。首次使用时：
+
+1. 打开扩展的 **扩展选项**（“本地助手设置”）；
+2. 助手地址保持默认 `http://127.0.0.1:39391`；
+3. 打开 `%LOCALAPPDATA%\PixivOneDrive\config.json`，复制 `token`；
+4. 粘贴到“访问令牌”，点击“保存并测试连接”。
+
+解压版扩展会自动读取安装器写入的令牌，不需要手动填写。
+
 ### 3. 验证
 
 1. 打开 pixiv 的任意作品页；
@@ -182,16 +193,20 @@ pixiv-onedrive\
   install.ps1                  安装脚本
   uninstall.ps1                卸载脚本
   status.ps1                   查看助手状态和日志
+  PRIVACY.md                   隐私政策
   extension\                   Edge MV3 扩展
     manifest.json
     background.js              收藏监听、元数据读取、助手通信
     content.js                 在 pixiv 页面内读取作品信息
     popup.html / popup.css / popup.js
+    options.html / options.css / options.js
     config.js                  安装时写入端口和令牌
     icons\
   helper\
     PixivOneDriveHelper.cs     本地助手源码（C# 5 / .NET Framework）
     PixivOneDriveHelper.exe    预编译版本
+  store\                       商店提交资料（说明、审核备注）
+  store-assets\                商店 Logo、宣传图和截图
   dist\PixivOneDrive.zip       可直接分发的压缩包
 ```
 
@@ -202,3 +217,4 @@ pixiv-onedrive\
 - 助手只允许 `https://*.pximg.net/img-original/` 和 `https://*.pximg.net/img-zip-ugoira/` 地址，防止被当成任意 URL 下载器。
 - 助手不读取、不保存 pixiv Cookie；Cookie 只在扩展的页面请求中使用。
 - 所有源码都在本目录，可自行审查后再运行。
+- 完整隐私政策见 [PRIVACY.md](PRIVACY.md)。

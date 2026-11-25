@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>本地助手设置 - Pixiv 收藏原图 → OneDrive</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <img class="logo" src="icons/icon48.png" alt="" />
+        <div>
+          <h1>本地助手设置</h1>
+          <p>连接运行在电脑上的 PixivOneDriveHelper，才能把原图写入 OneDrive。</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>连接信息</h2>
+
+        <label class="field">
+          <span class="label">助手地址</span>
+          <input
+            id="endpoint"
+            type="url"
+            placeholder="http://127.0.0.1:39391"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <span class="hint">通常保持默认即可，只有改过助手端口时才需要修改。</span>
+        </label>
+
+        <label class="field">
+          <span class="label">访问令牌</span>
+          <span class="token-row">
+            <input
+              id="token"
+              type="password"
+              placeholder="粘贴 config.json 里的 token"
+              spellcheck="false"
+              autocomplete="off"
+            />
+            <button id="toggleToken" class="secondary" type="button">显示</button>
+          </span>
+          <span class="hint">
+            安装本地助手时会生成令牌，保存在
+            <code>%LOCALAPPDATA%\PixivOneDrive\config.json</code> 的 <code>token</code> 字段。
+          </span>
+        </label>
+
+        <div class="actions">
+          <button id="saveBtn" class="primary" type="button">保存并测试连接</button>
+          <button id="testBtn" class="secondary" type="button" title="使用已保存的配置测试">重新测试</button>
+        </div>
+
+        <div id="status" class="status" data-state="idle" role="status">
+          还没有测试连接。
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>首次使用</h2>
+        <ol class="steps">
+          <li>下载并运行本地助手安装包 <code>Install.cmd</code>。</li>
+          <li>安装完成后，打开 <code>%LOCALAPPDATA%\PixivOneDrive\config.json</code>。</li>
+          <li>复制其中的 <code>token</code>，粘贴到上面的“访问令牌”，点击保存。</li>
+        </ol>
+        <p class="note">
+          解压版扩展的令牌会自动写入，通常不需要手动填写；从 Edge 加载项商店安装的版本需要在这里配置一次。
+        </p>
+        <a id="downloadLink" class="link-button" href="#" target="_blank" rel="noreferrer">
+          打开本地助手下载与安装说明
+        </a>
+      </section>
+
+      <footer class="footer">
+        <span>Pixiv 收藏原图 → OneDrive</span>
+        <span>令牌只保存在本机浏览器和本地助手中</span>
+      </footer>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

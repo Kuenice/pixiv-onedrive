@@ -4,6 +4,7 @@
   const statusTitle = document.getElementById("statusTitle");
   const statusDetail = document.getElementById("statusDetail");
   const testBtn = document.getElementById("testBtn");
+  const optionsBtn = document.getElementById("optionsBtn");
   const openBtn = document.getElementById("openBtn");
   const folderPath = document.getElementById("folderPath");
   const recentList = document.getElementById("recentList");
@@ -43,7 +44,7 @@
       lastState = state;
       renderState(state);
     } catch (error) {
-      renderOffline(error.message || String(error));
+      renderOffline(error.message || String(error), true);
     } finally {
       refreshing = false;
     }
@@ -77,17 +78,24 @@
     } else {
       renderOffline(
         state.helperError ||
-          "本地助手未运行。请运行 install.ps1，或重新启动电脑。"
+          "本地助手未运行。请运行 install.ps1，或重新启动电脑。",
+        state.configured !== false
       );
     }
 
     renderRecent(state.recent);
   }
 
-  function renderOffline(message) {
+  function renderOffline(message, configured) {
     statusDot.className = "status-dot offline";
-    statusTitle.textContent = "本地助手未运行";
-    statusDetail.textContent = message || "请运行 install.ps1，或重新启动电脑。";
+    if (configured === false) {
+      statusTitle.textContent = "尚未配置本地助手";
+      statusDetail.textContent = "请打开设置，填写助手地址和访问令牌。";
+    } else {
+      statusTitle.textContent = "本地助手未运行";
+      statusDetail.textContent =
+        message || "请运行 install.ps1，或重新启动电脑。";
+    }
     statusDetail.title = statusDetail.textContent;
     folderPath.textContent = "—";
     folderPath.title = "";
@@ -208,7 +216,18 @@
     }
   });
 
+  optionsBtn.addEventListener("click", () => {
+    chrome.runtime.openOptionsPage();
+    window.close();
+  });
+
   testBtn.addEventListener("click", async () => {
+    if (lastState && lastState.configured === false) {
+      chrome.runtime.openOptionsPage();
+      window.close();
+      return;
+    }
+
     setBusy(testBtn, true, "测试中");
     try {
       const result = await send({ type: "TEST_HELPER" });
@@ -221,7 +240,10 @@
         (Number(result.helper && result.helper.done) || 0);
       statusDetail.title = (result.helper && result.helper.downloadDir) || "";
     } catch (error) {
-      renderOffline(error.message || String(error));
+      renderOffline(
+        error.message || String(error),
+        !(lastState && lastState.configured === false)
+      );
     } finally {
       setBusy(testBtn, false);
     }

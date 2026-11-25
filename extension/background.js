@@ -8,8 +8,8 @@
 importScripts("config.js");
 
 const CONFIG = self.PIXIV_ONEDRIVE_CONFIG || {};
-const ENDPOINT = String(CONFIG.endpoint || "http://127.0.0.1:39391").replace(/\/+$/, "");
-const TOKEN = String(CONFIG.token || "");
+const DEFAULT_ENDPOINT = String(CONFIG.endpoint || "http://127.0.0.1:39391").replace(/\/+$/, "");
+const DEFAULT_TOKEN = String(CONFIG.token || "");
 const API_ORIGIN = "https://www.pixiv.net";
 
 const pendingBookmarks = new Map();
@@ -17,6 +17,7 @@ const recentlyQueued = new Map();
 const MESSAGE_TYPES = new Set([
   "GET_STATE",
   "SET_ENABLED",
+  "SAVE_SETTINGS",
   "TEST_HELPER",
   "OPEN_FOLDER",
   "CLEAR_RECENT"
@@ -471,21 +472,68 @@ function illustKind(type) {
 /* 本地助手通信                                                        */
 /* ------------------------------------------------------------------ */
 
+function normalizeHelperEndpoint(value) {
+  const endpoint = String(value || "").trim().replace(/\/+$/, "");
+  let parsed;
+  try {
+    parsed = new URL(endpoint);
+  } catch (error) {
+    throw new Error("本地助手地址格式无效。");
+  }
+
+  if (parsed.protocol !== "http:") {
+    throw new Error("本地助手地址必须使用 http://。");
+  }
+  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
+    throw new Error("本地助手地址只能是 127.0.0.1 或 localhost。");
+  }
+  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("本地助手地址不能包含路径、参数或锚点。");
+  }
+
+  return endpoint;
+}
+
+function isConfiguredToken(token) {
+  return Boolean(token) && token !== "INSTALL_REQUIRED";
+}
+
+async function getHelperConfig() {
+  const stored = await chrome.storage.local.get({
+    helperEndpoint: "",
+    helperToken: ""
+  });
+
+  let endpoint = DEFAULT_ENDPOINT;
+  if (stored.helperEndpoint) {
+    try {
+      endpoint = normalizeHelperEndpoint(stored.helperEndpoint);
+    } catch (error) {
+      endpoint = DEFAULT_ENDPOINT;
+    }
+  }
+
+  const token = String(stored.helperToken || DEFAULT_TOKEN || "").trim();
+  return { endpoint, token };
+}
+
 async function helperRequest(path, options, timeoutMs) {
-  if (!TOKEN || TOKEN === "INSTALL_REQUIRED") {
-    throw new Error("扩展还没有配置本地助手令牌，请重新运行 install.ps1。");
+  const helperConfig = await getHelperConfig();
+
+  if (!isConfiguredToken(helperConfig.token)) {
+    throw new Error("尚未配置本地助手。请打开扩展设置，填写访问令牌。");
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs || 8000);
 
-  const headers = { "X-Pixiv-Token": TOKEN };
+  const headers = { "X-Pixiv-Token": helperConfig.token };
   if (options && options.body) {
     headers["Content-Type"] = "application/json; charset=utf-8";
   }
 
   try {
-    const response = await fetch(ENDPOINT + path, {
+    const response = await fetch(helperConfig.endpoint + path, {
       method: (options && options.method) || "GET",
       headers,
       body: options && options.body,
@@ -592,20 +640,27 @@ async function getState() {
     enabled: true,
     recent: []
   });
+  const helperConfig = await getHelperConfig();
+  const configured = isConfiguredToken(helperConfig.token);
 
   let helper = null;
   let helperError = null;
-  try {
-    helper = await helperRequest("/health", { method: "GET" }, 4000);
-  } catch (error) {
-    helperError = error && error.message ? error.message : String(error);
+  if (configured) {
+    try {
+      helper = await helperRequest("/health", { method: "GET" }, 4000);
+    } catch (error) {
+      helperError = error && error.message ? error.message : String(error);
+    }
+  } else {
+    helperError = "尚未配置本地助手。请打开扩展设置，填写访问令牌。";
   }
 
   return {
     ok: true,
     enabled: data.enabled !== false,
     recent: Array.isArray(data.recent) ? data.recent : [],
-    endpoint: ENDPOINT,
+    endpoint: helperConfig.endpoint,
+    configured,
     helper,
     helperError
   };
@@ -619,6 +674,24 @@ async function handleMessage(message) {
     case "SET_ENABLED":
       await chrome.storage.local.set({ enabled: Boolean(message.enabled) });
       return { ok: true, enabled: Boolean(message.enabled) };
+
+    case "SAVE_SETTINGS": {
+      const endpoint = normalizeHelperEndpoint(message.endpoint);
+      const token = String(message.token || "").trim();
+
+      if (!isConfiguredToken(token)) {
+        throw new Error("请填写本地助手访问令牌。");
+      }
+      if (token.length > 256) {
+        throw new Error("访问令牌过长。");
+      }
+
+      await chrome.storage.local.set({
+        helperEndpoint: endpoint,
+        helperToken: token
+      });
+      return { ok: true, endpoint };
+    }
 
     case "TEST_HELPER":
       return { ok: true, helper: await helperRequest("/health", { method: "GET" }, 5000) };
