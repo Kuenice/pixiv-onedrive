@@ -12,16 +12,16 @@
 
    https://github.com/Kuenice/pixiv-onedrive/releases/latest
 
-2. 完整解压后双击 `Install.cmd`，或在 PowerShell 中运行：
+2. 完整解压后双击 `Install-Helper.cmd`（只安装本地助手，不安装解压版扩展），或在 PowerShell 中运行：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -HelperOnly
    ```
 
 3. 安装器不需要管理员权限。它会：
    - 编译/安装本地助手到 `%LOCALAPPDATA%\PixivOneDrive`；
    - 创建并启动 `PixivOneDriveHelper.exe`；
-   - 生成 `%LOCALAPPDATA%\PixivOneDrive\config.json`；
+   - 生成 `%LOCALAPPDATA%\PixivOneDrive\config.json`，并把 `token` 复制到剪贴板；
    - 创建保存目录 `%OneDrive%\pixiv`（如果没有 OneDrive，则使用 `%USERPROFILE%\OneDrive\pixiv`）。
 
 4. 检查助手状态：

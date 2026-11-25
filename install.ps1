@@ -2,7 +2,8 @@
 param(
     [string]$DownloadDir = "",
     [switch]$NoStartup,
-    [switch]$NoOpen
+    [switch]$NoOpen,
+    [switch]$HelperOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -174,19 +175,23 @@ try {
         Write-Warning "已使用预编译的本地助手。"
     }
 
-    Write-Step "安装 Edge 扩展文件"
-    if (Test-Path $extensionDir) {
-        Remove-Item $extensionDir -Recurse -Force
+    if (-not $HelperOnly) {
+        Write-Step "安装 Edge 扩展文件"
+        if (Test-Path $extensionDir) {
+            Remove-Item $extensionDir -Recurse -Force
+        }
+        Copy-Item $extensionSource $extensionDir -Recurse
+        Write-Utf8NoBom (Join-Path $extensionDir "config.js") (
+            "self.PIXIV_ONEDRIVE_CONFIG = " +
+            ([ordered]@{
+                endpoint = "http://127.0.0.1:" + $port
+                token = $token
+            } | ConvertTo-Json -Compress) +
+            ";`r`n"
+        )
+    } else {
+        Write-Step "跳过扩展文件（-HelperOnly）"
     }
-    Copy-Item $extensionSource $extensionDir -Recurse
-    Write-Utf8NoBom (Join-Path $extensionDir "config.js") (
-        "self.PIXIV_ONEDRIVE_CONFIG = " +
-        ([ordered]@{
-            endpoint = "http://127.0.0.1:" + $port
-            token = $token
-        } | ConvertTo-Json -Compress) +
-        ";`r`n"
-    )
 
     Write-Step "写入配置"
     $configObject = [ordered]@{
@@ -251,7 +256,7 @@ try {
         Write-Host ("本地助手运行正常（端口 " + $port + "）。")
     }
 
-    if (-not $NoOpen) {
+    if (-not $NoOpen -and -not $HelperOnly) {
         $edgeCandidates = @(
             (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"),
             (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe")
@@ -268,15 +273,41 @@ try {
     Write-Host " 安装完成" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host (" 保存目录 : " + $DownloadDir)
-    Write-Host (" 扩展目录 : " + $extensionDir)
+    if (-not $HelperOnly) {
+        Write-Host (" 扩展目录 : " + $extensionDir)
+    }
     Write-Host (" 助手日志 : " + (Join-Path $installDir "helper.log"))
+    Write-Host (" 令牌文件 : " + $configPath)
     Write-Host ""
-    Write-Host " 最后一步（只需做一次）：" -ForegroundColor Yellow
-    Write-Host "   1. 在打开的 Edge 扩展页启用“开发人员模式”"
-    Write-Host "   2. 点击“加载解压缩的扩展”"
-    Write-Host ("      选择：" + $extensionDir)
-    Write-Host "   3. 把扩展固定到工具栏，然后去 pixiv 收藏作品"
-    Write-Host ""
+
+    if ($HelperOnly) {
+        $copied = $false
+        try {
+            Set-Clipboard -Value $token -ErrorAction Stop
+            $copied = $true
+        } catch {
+            Write-Warning ("无法复制令牌到剪贴板：" + $_.Exception.Message)
+        }
+
+        Write-Host " 商店版扩展配置：" -ForegroundColor Yellow
+        Write-Host "   1. 在 Edge 加载项商店安装扩展"
+        Write-Host "   2. 打开扩展的“本地助手设置”"
+        Write-Host "   3. 助手地址保持默认，粘贴访问令牌"
+        if ($copied) {
+            Write-Host "      访问令牌已复制到剪贴板，可直接粘贴。" -ForegroundColor Green
+        } else {
+            Write-Host ("      访问令牌在：" + $configPath)
+        }
+        Write-Host ""
+    } else {
+        Write-Host " 最后一步（只需做一次）：" -ForegroundColor Yellow
+        Write-Host "   1. 在打开的 Edge 扩展页启用“开发人员模式”"
+        Write-Host "   2. 点击“加载解压缩的扩展”"
+        Write-Host ("      选择：" + $extensionDir)
+        Write-Host "   3. 把扩展固定到工具栏，然后去 pixiv 收藏作品"
+        Write-Host ""
+    }
+
     if (-not $healthy) {
         Write-Host " 注意：本地助手当前未响应，请先查看日志。" -ForegroundColor Red
     }

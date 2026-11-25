@@ -79,10 +79,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DownloadDir "
 
 如果通过 **Microsoft Edge 加载项商店**安装，扩展目录是只读的，安装器无法自动写入 `config.js`。首次使用时：
 
-1. 打开扩展的 **扩展选项**（“本地助手设置”）；
-2. 助手地址保持默认 `http://127.0.0.1:39391`；
-3. 打开 `%LOCALAPPDATA%\PixivOneDrive\config.json`，复制 `token`；
-4. 粘贴到“访问令牌”，点击“保存并测试连接”。
+1. 下载 `PixivOneDrive.zip`，解压后双击 `Install-Helper.cmd`（只安装本地助手）；
+2. 安装器会把访问令牌复制到剪贴板；
+3. 打开扩展的 **扩展选项**（“本地助手设置”）；
+4. 助手地址保持默认 `http://127.0.0.1:39391`，粘贴访问令牌；
+5. 点击“保存并测试连接”。
 
 解压版扩展会自动读取安装器写入的令牌，不需要手动填写。
 
@@ -108,6 +109,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\status.ps1
 | `-DownloadDir "D:\OneDrive\pixiv"` | 指定保存目录 |
 | `-NoStartup` | 不创建开机自启动快捷方式 |
 | `-NoOpen` | 安装完成后不自动打开 Edge 和资源管理器 |
+| `-HelperOnly` | 只安装本地助手，不安装解压版扩展（商店版使用） |
 
 重新运行 `install.ps1` 会保留原来的令牌，并重新生成扩展配置。修改端口或保存目录后，请在 `edge://extensions/` 中点击扩展的 **重新加载**。
 
@@ -189,7 +191,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
 
 ```text
 pixiv-onedrive\
-  Install.cmd                  双击安装
+  Install.cmd                  双击安装（解压版扩展 + 助手）
+  Install-Helper.cmd           只安装本地助手（商店版）
   install.ps1                  安装脚本
   uninstall.ps1                卸载脚本
   status.ps1                   查看助手状态和日志
