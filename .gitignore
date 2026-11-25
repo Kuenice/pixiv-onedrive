@@ -1,0 +1,12 @@
+# 本地构建与运行产物
+dist/
+*.log
+*.part
+
+# 本地配置（安装时生成，包含随机令牌）
+config.json
+
+# 工具与临时目录
+.gh-config/
+tools/
+.vs/

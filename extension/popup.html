@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixiv 收藏原图 → OneDrive</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <img class="brand-icon" src="icons/icon48.png" alt="" />
+          <div class="brand-copy">
+            <h1>Pixiv → OneDrive</h1>
+            <p>收藏作品，自动保存原图</p>
+          </div>
+        </div>
+        <label class="switch" title="启用或暂停自动下载">
+          <input id="enabled" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">启用自动下载</span>
+        </label>
+      </header>
+
+      <section class="card status-card" id="statusCard">
+        <span class="status-dot" id="statusDot" aria-hidden="true"></span>
+        <div class="status-copy">
+          <strong id="statusTitle">正在检查本地助手…</strong>
+          <span id="statusDetail">—</span>
+        </div>
+        <button class="mini" id="testBtn" type="button">测试</button>
+      </section>
+
+      <section class="card folder-card">
+        <div class="folder-copy">
+          <span class="eyebrow">保存到</span>
+          <code id="folderPath">—</code>
+        </div>
+        <button class="mini" id="openBtn" type="button" disabled>打开</button>
+      </section>
+
+      <section class="recent">
+        <div class="recent-head">
+          <h2>最近记录</h2>
+          <button class="text-button" id="clearBtn" type="button">清空</button>
+        </div>
+        <ul class="recent-list" id="recentList">
+          <li class="empty">还没有记录。去 pixiv 收藏一张作品试试。</li>
+        </ul>
+      </section>
+
+      <footer class="footer">
+        <span>命名：<code>pid_pn.ext</code> · n 从 0 开始</span>
+        <a href="https://www.pixiv.net/" target="_blank" rel="noreferrer">pixiv.net</a>
+      </footer>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
