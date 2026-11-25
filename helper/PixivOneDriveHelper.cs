@@ -81,7 +81,7 @@ namespace PixivOneDriveHelper
 
     internal static class Program
     {
-        private const string HelperVersion = "1.0.1";
+        private const string HelperVersion = "1.0.2";
         private const string UserAgent =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
@@ -313,7 +313,10 @@ namespace PixivOneDriveHelper
             }
             catch (Exception ex)
             {
-                WriteError(response, 413, ex.Message);
+                int statusCode = string.Equals(ex.Message, "请求体过大", StringComparison.Ordinal)
+                    ? 413
+                    : 400;
+                WriteError(response, statusCode, ex.Message);
                 return;
             }
 
@@ -322,8 +325,12 @@ namespace PixivOneDriveHelper
             {
                 payload = new JavaScriptSerializer().Deserialize<DownloadRequest>(body);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Log(
+                    "请求 JSON 无效: " + ex.Message +
+                    " contentType=" + (request.ContentType ?? "") +
+                    " contentLength=" + request.ContentLength64.ToString(CultureInfo.InvariantCulture));
                 WriteError(response, 400, "请求 JSON 无效");
                 return;
             }
@@ -716,26 +723,51 @@ namespace PixivOneDriveHelper
 
         private static string ReadBody(HttpListenerRequest request, int maxBytes)
         {
-            if (request.ContentLength64 > maxBytes)
+            long contentLength = request.ContentLength64;
+            if (contentLength > maxBytes)
             {
                 throw new InvalidOperationException("请求体过大");
             }
 
-            Encoding encoding = request.ContentEncoding ?? Encoding.UTF8;
-            using (StreamReader reader = new StreamReader(request.InputStream, encoding))
+            byte[] buffer = new byte[8192];
+
+            using (MemoryStream memory = new MemoryStream())
             {
-                char[] buffer = new char[8192];
-                StringBuilder builder = new StringBuilder();
                 int read;
-                while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                while ((read = request.InputStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    builder.Append(buffer, 0, read);
-                    if (builder.Length > maxBytes)
+                    memory.Write(buffer, 0, read);
+                    if (memory.Length > maxBytes)
                     {
                         throw new InvalidOperationException("请求体过大");
                     }
                 }
-                return builder.ToString();
+
+                if (contentLength > 0 && memory.Length != contentLength)
+                {
+                    throw new InvalidOperationException("请求体不完整");
+                }
+
+                byte[] bytes = memory.ToArray();
+                int offset = 0;
+                if (bytes.Length >= 3 &&
+                    bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                {
+                    offset = 3;
+                }
+
+                try
+                {
+                    // JSON 固定按 UTF-8 解码，不能依赖系统默认代码页。
+                    return new UTF8Encoding(false, true).GetString(
+                        bytes,
+                        offset,
+                        bytes.Length - offset);
+                }
+                catch (DecoderFallbackException)
+                {
+                    throw new InvalidOperationException("请求体不是有效的 UTF-8");
+                }
             }
         }
 

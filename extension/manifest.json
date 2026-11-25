@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Pixiv 收藏原图 → OneDrive",
   "short_name": "Pixiv → OneDrive",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "在 pixiv.net 收藏作品后，自动把原图保存到 OneDrive\\pixiv，文件名为 pid_pn.ext（n 从 0 开始）。",
   "minimum_chrome_version": "110",
   "permissions": [

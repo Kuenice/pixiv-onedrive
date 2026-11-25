@@ -481,7 +481,7 @@ async function helperRequest(path, options, timeoutMs) {
 
   const headers = { "X-Pixiv-Token": TOKEN };
   if (options && options.body) {
-    headers["Content-Type"] = "application/json";
+    headers["Content-Type"] = "application/json; charset=utf-8";
   }
 
   try {
