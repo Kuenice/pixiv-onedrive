@@ -19,6 +19,7 @@ namespace PixivOneDriveHelper
         public string token { get; set; }
         public string downloadDir { get; set; }
         public int maxConcurrentJobs { get; set; }
+        public int idleExitMinutes { get; set; }
 
         public Config()
         {
@@ -26,6 +27,7 @@ namespace PixivOneDriveHelper
             token = "";
             downloadDir = "";
             maxConcurrentJobs = 2;
+            idleExitMinutes = 0;
         }
 
         public static Config Load(string path)
@@ -81,7 +83,7 @@ namespace PixivOneDriveHelper
 
     internal static class Program
     {
-        private const string HelperVersion = "1.0.2";
+        private const string HelperVersion = "1.1.0";
         private const string UserAgent =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
@@ -100,6 +102,8 @@ namespace PixivOneDriveHelper
         private static Mutex mutex;
         private static string logPath;
         private static DateTime startedUtc = DateTime.UtcNow;
+        private static DateTime lastActivityUtc = DateTime.UtcNow;
+        private static volatile bool shuttingDown;
 
         private static int activeCount;
         private static int doneCount;
@@ -135,6 +139,14 @@ namespace PixivOneDriveHelper
                 if (config.maxConcurrentJobs > 4)
                 {
                     config.maxConcurrentJobs = 4;
+                }
+                if (config.idleExitMinutes < 0)
+                {
+                    config.idleExitMinutes = 0;
+                }
+                if (config.idleExitMinutes > 240)
+                {
+                    config.idleExitMinutes = 240;
                 }
 
                 Directory.CreateDirectory(config.downloadDir);
@@ -192,6 +204,18 @@ namespace PixivOneDriveHelper
                     " 端口=" + config.port.ToString(CultureInfo.InvariantCulture) +
                     " 保存目录=" + config.downloadDir);
 
+                if (config.idleExitMinutes > 0)
+                {
+                    Log(
+                        "空闲退出已启用：" +
+                        config.idleExitMinutes.ToString(CultureInfo.InvariantCulture) +
+                        " 分钟无请求且队列为空时自动退出。");
+                    Thread watchdog = new Thread(IdleWatchdog);
+                    watchdog.IsBackground = true;
+                    watchdog.Name = "IdleWatchdog";
+                    watchdog.Start();
+                }
+
                 while (true)
                 {
                     HttpListenerContext context = listener.GetContext();
@@ -205,8 +229,34 @@ namespace PixivOneDriveHelper
             }
         }
 
+        private static void IdleWatchdog()
+        {
+            TimeSpan limit = TimeSpan.FromMinutes(config.idleExitMinutes);
+            while (true)
+            {
+                Thread.Sleep(15000);
+                if (activeCount > 0 || (queue != null && queue.Count > 0))
+                {
+                    lastActivityUtc = DateTime.UtcNow;
+                    continue;
+                }
+                if (DateTime.UtcNow - lastActivityUtc < limit)
+                {
+                    continue;
+                }
+
+                shuttingDown = true;
+                Log(
+                    "空闲超过 " +
+                    config.idleExitMinutes.ToString(CultureInfo.InvariantCulture) +
+                    " 分钟，助手自动退出。");
+                Environment.Exit(0);
+            }
+        }
+
         private static void HandleContext(object state)
         {
+            lastActivityUtc = DateTime.UtcNow;
             HttpListenerContext context = (HttpListenerContext)state;
             HttpListenerRequest request = context.Request;
             HttpListenerResponse response = context.Response;

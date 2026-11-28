@@ -14,7 +14,7 @@
 3. 上传商店包：
 
    ```text
-   dist/PixivOneDrive-store-1.1.0.zip
+   dist/PixivOneDrive-store-1.2.0.zip
    ```
 
    包内 `manifest.json` 必须位于 zip 根目录。
@@ -52,6 +52,7 @@ Hidden 仍然是正式商店扩展，安装后不会出现“开发人员模式�
 | `http://127.0.0.1/*` | 与用户电脑上的本地助手通信；只连接本机回环地址。 |
 | `storage` | 保存启用状态、最近记录和本地助手配置。 |
 | `notifications` | 下载失败时通知用户。 |
+| `nativeMessaging` | 按需启动本地助手，避免助手开机常驻占用内存；只发送一条启动请求，不执行外部代码。 |
 
 ### Remote code
 
@@ -105,4 +106,4 @@ https://github.com/Kuenice/pixiv-onedrive/blob/main/PRIVACY.md
 
 - 不要为了消除提示而修改 Edge 的开发者模式通知；微软明确不允许关闭。
 - 商店版安装后，仍需安装本机助手，否则扩展只能显示“未配置/未运行”，无法写入 OneDrive。
-- 目前扩展版本为 `1.1.0`，助手版本为 `1.0.2`。
+- 目前扩展版本为 `1.2.0`（认证中），助手版本为 `1.1.0`。

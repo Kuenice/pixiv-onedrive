@@ -3,7 +3,9 @@ param(
     [string]$DownloadDir = "",
     [switch]$NoStartup,
     [switch]$NoOpen,
-    [switch]$HelperOnly
+    [switch]$HelperOnly,
+    [switch]$OnDemand,
+    [int]$IdleExitMinutes = -1
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +20,25 @@ function Write-Utf8NoBom {
     param([string]$Path, [string]$Text)
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $Text, $encoding)
+}
+
+function Get-ExtensionIdFromKey {
+    param([string]$KeyBase64)
+
+    try {
+        $der = [Convert]::FromBase64String($KeyBase64)
+        $sha = [System.Security.Cryptography.SHA256]::Create().ComputeHash($der)
+        $alphabet = "abcdefghijklmnop"
+        $builder = New-Object System.Text.StringBuilder
+        for ($i = 0; $i -lt 16; $i++) {
+            $byte = $sha[$i]
+            [void]$builder.Append($alphabet[$byte -shr 4])
+            [void]$builder.Append($alphabet[$byte -band 0x0F])
+        }
+        return $builder.ToString()
+    } catch {
+        return $null
+    }
 }
 
 function Stop-HelperProcesses {
@@ -51,6 +72,9 @@ try {
     $helperSourceDir = Join-Path $root "helper"
     $helperSource = Join-Path $helperSourceDir "PixivOneDriveHelper.cs"
     $prebuiltHelper = Join-Path $helperSourceDir "PixivOneDriveHelper.exe"
+    $launcherSourceDir = Join-Path $root "launcher"
+    $launcherSource = Join-Path $launcherSourceDir "PixivOneDriveLauncher.cs"
+    $prebuiltLauncher = Join-Path $launcherSourceDir "PixivOneDriveLauncher.exe"
 
     if (-not (Test-Path (Join-Path $extensionSource "manifest.json"))) {
         throw "找不到 extension\manifest.json。请确保压缩包已完整解压。"
@@ -64,8 +88,17 @@ try {
     $configPath = Join-Path $installDir "config.json"
     $exePath = Join-Path $installDir "PixivOneDriveHelper.exe"
     $sourcePath = Join-Path $installDir "PixivOneDriveHelper.cs"
+    $launcherPath = Join-Path $installDir "PixivOneDriveLauncher.exe"
 
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+
+    if ($IdleExitMinutes -lt 0) {
+        if ($OnDemand) {
+            $IdleExitMinutes = 15
+        } else {
+            $IdleExitMinutes = 0
+        }
+    }
 
     $oldConfig = $null
     if (Test-Path $configPath) {
@@ -175,6 +208,38 @@ try {
         Write-Warning "已使用预编译的本地助手。"
     }
 
+    Write-Step "安装按需启动器"
+    if (Test-Path $launcherSource) {
+        $launcherCompiled = $false
+        if (Test-Path $csc) {
+            $launcherArgs = @(
+                "/nologo",
+                "/target:winexe",
+                "/optimize+",
+                "/codepage:65001",
+                "/platform:anycpu",
+                ("/out:" + $launcherPath),
+                $launcherSource
+            )
+            $launcherOutput = & $csc $launcherArgs 2>&1
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $launcherPath)) {
+                $launcherCompiled = $true
+            } else {
+                Write-Warning ("启动器编译失败：" + ($launcherOutput -join " "))
+            }
+        }
+        if (-not $launcherCompiled -and (Test-Path $prebuiltLauncher)) {
+            Copy-Item $prebuiltLauncher $launcherPath -Force
+            $launcherCompiled = $true
+            Write-Warning "已使用预编译的按需启动器。"
+        }
+        if ($launcherCompiled) {
+            Write-Host ("已安装按需启动器：" + $launcherPath)
+        }
+    } else {
+        Write-Warning "找不到 launcher\PixivOneDriveLauncher.cs，跳过按需启动器。"
+    }
+
     if (-not $HelperOnly) {
         Write-Step "安装 Edge 扩展文件"
         if (Test-Path $extensionDir) {
@@ -199,17 +264,59 @@ try {
         token = $token
         downloadDir = $DownloadDir
         maxConcurrentJobs = 2
+        idleExitMinutes = $IdleExitMinutes
     }
     Write-Utf8NoBom $configPath ($configObject | ConvertTo-Json -Depth 4)
+
+    Write-Step "注册按需拉起（Native Messaging）"
+    $nativeHostName = "com.kuenice.pixiv_onedrive_launcher"
+    $nativeHostManifestPath = Join-Path $installDir ($nativeHostName + ".json")
+    $extensionId = "fiikgpfcmommnnfahgnikomdkfohkcdn"
+    $extensionManifestPath = Join-Path $extensionSource "manifest.json"
+    if (Test-Path $extensionManifestPath) {
+        try {
+            $extensionManifest = Get-Content $extensionManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($extensionManifest.key) {
+                $computedId = Get-ExtensionIdFromKey $extensionManifest.key
+                if ($computedId) {
+                    $extensionId = $computedId
+                }
+            }
+        } catch {
+            Write-Warning ("读取扩展 manifest 失败：" + $_.Exception.Message)
+        }
+    }
+    if (Test-Path $launcherPath) {
+        $nativeHostManifest = [ordered]@{
+            name = $nativeHostName
+            description = "Pixiv OneDrive helper launcher"
+            path = $launcherPath
+            type = "stdio"
+            allowed_origins = @("chrome-extension://" + $extensionId + "/")
+        }
+        Write-Utf8NoBom $nativeHostManifestPath ($nativeHostManifest | ConvertTo-Json -Depth 5)
+        $nativeHostRegPath = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\" + $nativeHostName
+        New-Item -Path $nativeHostRegPath -Force | Out-Null
+        Set-Item -Path $nativeHostRegPath -Value $nativeHostManifestPath
+        Write-Host ("已注册本地宿主：" + $nativeHostName)
+        Write-Host ("  程序：" + $launcherPath)
+        Write-Host ("  允许来源：chrome-extension://" + $extensionId + "/")
+    } else {
+        Write-Warning "启动器不存在，跳过 Native Messaging 注册。"
+    }
 
     Write-Step "注册开机自启动"
     $startupDir = [Environment]::GetFolderPath("Startup")
     $shortcutPath = Join-Path $startupDir "PixivOneDriveHelper.lnk"
-    if ($NoStartup) {
+    if ($NoStartup -or $OnDemand) {
         if (Test-Path $shortcutPath) {
             Remove-Item $shortcutPath -Force
         }
-        Write-Host "已跳过开机自启动（-NoStartup）。"
+        if ($OnDemand) {
+            Write-Host "已切换为按需启动：删除开机自启动，改由扩展在需要时拉起。"
+        } else {
+            Write-Host "已跳过开机自启动（-NoStartup）。"
+        }
     } else {
         try {
             $shell = New-Object -ComObject WScript.Shell
@@ -277,7 +384,11 @@ try {
         Write-Host (" 扩展目录 : " + $extensionDir)
     }
     Write-Host (" 助手日志 : " + (Join-Path $installDir "helper.log"))
+    Write-Host (" 启动器   : " + $launcherPath)
+    Write-Host (" 启动器日志: " + (Join-Path $installDir "launcher.log"))
     Write-Host (" 令牌文件 : " + $configPath)
+    Write-Host (" 启动方式 : " + $(if ($OnDemand) { "按需拉起（扩展触发）" } else { "开机自启动" }))
+    Write-Host (" 空闲退出 : " + $(if ($IdleExitMinutes -gt 0) { $IdleExitMinutes.ToString() + " 分钟" } else { "关闭" }))
     Write-Host ""
 
     if ($HelperOnly) {
@@ -305,6 +416,14 @@ try {
         Write-Host "   2. 点击“加载解压缩的扩展”"
         Write-Host ("      选择：" + $extensionDir)
         Write-Host "   3. 把扩展固定到工具栏，然后去 pixiv 收藏作品"
+        Write-Host ""
+    }
+
+    if ($OnDemand) {
+        Write-Host " 按需启动提示：" -ForegroundColor Yellow
+        Write-Host "   1. 在 edge://extensions 里先移除已安装的旧版同名扩展"
+        Write-Host "   2. 再点“加载解压缩的扩展”，选择上面的扩展目录"
+        Write-Host "   3. 之后打开插件面板或收藏作品，助手才会被拉起"
         Write-Host ""
     }
 

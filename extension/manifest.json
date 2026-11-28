@@ -2,10 +2,11 @@
   "manifest_version": 3,
   "name": "Pixiv 收藏原图 → OneDrive",
   "short_name": "Pixiv → OneDrive",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "在 pixiv.net 收藏作品后，自动把原图保存到 OneDrive\\pixiv，文件名为 pid_pn.ext（n 从 0 开始）。",
   "homepage_url": "https://github.com/Kuenice/pixiv-onedrive",
   "minimum_chrome_version": "110",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4E5e0+/s4C/WRwMUYXGN5fyV4znxaBde1Vw1CtPflSW4o2nbhgYeRjWGbj3Lil1JTAiquYOoy3wDn8wZH05tArRIJdALzuDBBSiy5/Hha0V5EIiyK3hDLz0Rd8Fs5jaluJci6KmtQ+oq4AnBmVuw6ABW2eofi99Jz5+FuL/WPx/JpgvsOjGkZ29bbXfLiRwXzEGQ3D8miLheKW9C+K6Fk17JCVYg+tgsG7kr+cW9aWrUj+f2b/hwreAUzyfkjTGk8JO2z0yTaTBUL4ODb1YW3LUd09tmWGYW9p+KvwPBKE69lqiPcuvpHdu20ewL639sf3emRX6XigDWEaNUqj9xXQIDAQAB",
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
@@ -13,7 +14,8 @@
   "permissions": [
     "webRequest",
     "storage",
-    "notifications"
+    "notifications",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://www.pixiv.net/*",

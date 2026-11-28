@@ -34,13 +34,16 @@
     });
   }
 
-  async function refresh() {
+  async function refresh(autoStart) {
     if (refreshing) {
       return;
     }
     refreshing = true;
     try {
-      const state = await send({ type: "GET_STATE" });
+      const state = await send({
+        type: "GET_STATE",
+        autoStart: Boolean(autoStart)
+      });
       lastState = state;
       renderState(state);
     } catch (error) {
@@ -78,7 +81,7 @@
     } else {
       renderOffline(
         state.helperError ||
-          "本地助手未运行。请运行 install.ps1，或重新启动电脑。",
+          "本地助手未运行。打开插件或收藏作品时应当自动拉起，若一直失败请运行 install.ps1 -OnDemand。",
         state.configured !== false
       );
     }
@@ -267,9 +270,10 @@
     }
   });
 
-  window.addEventListener("focus", refresh);
+  window.addEventListener("focus", () => refresh(false));
   document.addEventListener("DOMContentLoaded", () => {
-    refresh();
-    window.setInterval(refresh, 5000);
+    // 首次打开面板时允许自动拉起本地助手，之后的轮询不再重复触发。
+    refresh(true);
+    window.setInterval(() => refresh(false), 5000);
   });
 })();

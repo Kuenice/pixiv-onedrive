@@ -11,6 +11,7 @@ const CONFIG = self.PIXIV_ONEDRIVE_CONFIG || {};
 const DEFAULT_ENDPOINT = String(CONFIG.endpoint || "http://127.0.0.1:39391").replace(/\/+$/, "");
 const DEFAULT_TOKEN = String(CONFIG.token || "");
 const API_ORIGIN = "https://www.pixiv.net";
+const NATIVE_HOST = "com.kuenice.pixiv_onedrive_launcher";
 
 const pendingBookmarks = new Map();
 const recentlyQueued = new Map();
@@ -517,13 +518,7 @@ async function getHelperConfig() {
   return { endpoint, token };
 }
 
-async function helperRequest(path, options, timeoutMs) {
-  const helperConfig = await getHelperConfig();
-
-  if (!isConfiguredToken(helperConfig.token)) {
-    throw new Error("尚未配置本地助手。请打开扩展设置，填写访问令牌。");
-  }
-
+async function performHelperRequest(helperConfig, path, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs || 8000);
 
@@ -565,13 +560,128 @@ async function helperRequest(path, options, timeoutMs) {
       throw new Error("本地助手响应超时。");
     }
     if (error instanceof TypeError) {
-      throw new Error(
-        "无法连接本地助手。请确认 PixivOneDriveHelper 正在运行（重新运行 install.ps1 或重启电脑）。"
-      );
+      const connectError = new Error("无法连接本地助手。");
+      connectError.connectFailed = true;
+      throw connectError;
     }
     throw error;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 按需拉起本地助手                                                    */
+/* ------------------------------------------------------------------ */
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function probeHelper(helperConfig, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 1500);
+  try {
+    const response = await fetch(helperConfig.endpoint + "/health", {
+      method: "GET",
+      headers: { "X-Pixiv-Token": helperConfig.token },
+      signal: controller.signal,
+      cache: "no-store"
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sendNativeToLauncher(payload) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message));
+          return;
+        }
+        if (!response) {
+          reject(new Error("本地启动器没有响应。"));
+          return;
+        }
+        resolve(response);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+let helperLaunchPromise = null;
+
+async function waitForHelper(helperConfig, budgetMs) {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (await probeHelper(helperConfig, 1200)) {
+      return true;
+    }
+    await sleep(350);
+  }
+  return false;
+}
+
+async function launchHelper(helperConfig) {
+  try {
+    const reply = await sendNativeToLauncher({ op: "ensure", endpoint: helperConfig.endpoint });
+    console.info("[Pixiv→OneDrive] 启动器返回", reply);
+  } catch (error) {
+    console.warn("[Pixiv→OneDrive] 无法调用本地启动器", error);
+    return false;
+  }
+  return await waitForHelper(helperConfig, 15000);
+}
+
+async function ensureHelperRunning(helperConfig) {
+  if (await probeHelper(helperConfig, 1200)) {
+    return true;
+  }
+  if (!helperLaunchPromise) {
+    helperLaunchPromise = launchHelper(helperConfig);
+    helperLaunchPromise
+      .catch(() => false)
+      .then(() => {
+        helperLaunchPromise = null;
+      });
+  }
+  return await helperLaunchPromise;
+}
+
+async function helperRequest(path, options, timeoutMs, allowAutoStart) {
+  const helperConfig = await getHelperConfig();
+
+  if (!isConfiguredToken(helperConfig.token)) {
+    throw new Error("尚未配置本地助手。请打开扩展设置，填写访问令牌。");
+  }
+
+  try {
+    return await performHelperRequest(helperConfig, path, options, timeoutMs);
+  } catch (error) {
+    if (!error || !error.connectFailed) {
+      throw error;
+    }
+
+    if (allowAutoStart === false) {
+      throw new Error("本地助手未运行。打开插件面板或收藏作品时会自动拉起。");
+    }
+
+    const started = await ensureHelperRunning(helperConfig);
+    if (!started) {
+      throw new Error(
+        "无法连接本地助手，自动启动也没有成功。请运行 install.ps1 -OnDemand，或手动打开 PixivOneDriveHelper.exe。"
+      );
+    }
+
+    return await performHelperRequest(helperConfig, path, options, timeoutMs);
   }
 }
 
@@ -635,7 +745,7 @@ function notifyError(message) {
   }
 }
 
-async function getState() {
+async function getState(autoStart) {
   const data = await chrome.storage.local.get({
     enabled: true,
     recent: []
@@ -647,7 +757,7 @@ async function getState() {
   let helperError = null;
   if (configured) {
     try {
-      helper = await helperRequest("/health", { method: "GET" }, 4000);
+      helper = await helperRequest("/health", { method: "GET" }, 4000, Boolean(autoStart));
     } catch (error) {
       helperError = error && error.message ? error.message : String(error);
     }
@@ -669,7 +779,7 @@ async function getState() {
 async function handleMessage(message) {
   switch (message.type) {
     case "GET_STATE":
-      return await getState();
+      return await getState(Boolean(message.autoStart));
 
     case "SET_ENABLED":
       await chrome.storage.local.set({ enabled: Boolean(message.enabled) });
